@@ -1,0 +1,50 @@
+name: Publish S24 Metin2 v75 QA APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-s24-qa-v75.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metin2-s24-qa-v75-release
+  cancel-in-progress: false
+
+jobs:
+  publish-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download the exact QA APK from the NAS HTTPS origin
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 15 --max-time 300 \
+            --output Metin2-Tailnet-ServerPicker-QA-v75.apk \
+            'https://nas.tail8abd52.ts.net/metin2-s24/Metin2-Tailnet-ServerPicker-QA-v75.apk'
+          printf '%s  %s\n' \
+            'b5f90cf226e2fa9de1e88a515e62715d7b1602b2615353174914ec93d3332184' \
+            'Metin2-Tailnet-ServerPicker-QA-v75.apk' | sha256sum --check --status
+          test "$(stat --format=%s Metin2-Tailnet-ServerPicker-QA-v75.apk)" = 102607999
+          echo 'Verified: exact original Windows-built v75 QA APK.'
+      - name: Publish separate pre-release (never replace production APK)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view s24-qa-v75 --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload s24-qa-v75 Metin2-Tailnet-ServerPicker-QA-v75.apk --repo "$GH_REPO" --clobber
+          else
+            gh release create s24-qa-v75 Metin2-Tailnet-ServerPicker-QA-v75.apk \
+              --repo "$GH_REPO" --title 'Metin2 S24 Ultra QA v75 — Tailnet server picker' \
+              --notes 'Separate ARM64 Android QA client with Tailscale FreeBSD/NAS server selection. Package: com.metin2.bgfx.qa, versionCode 75. SHA256 b5f90cf226e2fa9de1e88a515e62715d7b1602b2615353174914ec93d3332184. This is a test APK, not the production Metin2 client and not proof of playable game-world loading.' \
+              --prerelease --target main
+          fi
+          gh release view s24-qa-v75 --repo "$GH_REPO" --json assets,tagName,url
