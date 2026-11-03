@@ -1,0 +1,51 @@
+name: Publish Android ARM64 Metin2 server QA v2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-android-server-arm64-qa-v2.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-server-arm64-qa-v2
+  cancel-in-progress: false
+
+jobs:
+  verify-and-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download verified Windows-built ARM64 server QA APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 3 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 15 --max-time 240 \
+            --output Metin2-Android-Server-ARM64-QA-v2.apk \
+            'https://nas.tail8abd52.ts.net/metin2-s24/Metin2-Android-Server-ARM64-QA-v2.apk'
+          printf '%s  %s\n' \
+            'c9fef5277482b69b6f6c96e57fe5d978bcd78033e80437e589602a4083be51a4' \
+            'Metin2-Android-Server-ARM64-QA-v2.apk' | sha256sum --check
+          test "$(stat --format=%s Metin2-Android-Server-ARM64-QA-v2.apk)" = 25637586
+      - name: Publish separate GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view server-arm64-qa-v2 --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload server-arm64-qa-v2 Metin2-Android-Server-ARM64-QA-v2.apk \
+              --repo "$GH_REPO" --clobber
+          else
+            gh release create server-arm64-qa-v2 Metin2-Android-Server-ARM64-QA-v2.apk \
+              --repo "$GH_REPO" \
+              --title 'Metin2 Android ARM64 server QA v2 (original C++ components)' \
+              --notes 'EXPERIMENTAL QA / NOT YET STANDALONE OR LOGIN-VERIFIED. Bundles original Auth, Master, DB and Game AArch64 PIE binaries and original FreeBSD game data. BlueStacks x86_64 run verified with an external isolated NAS MariaDB (all 4 processes, all 4 listener ports, 16 DB sessions). The ARM64 APK has NOT been verified running on a real Samsung Galaxy S24 Ultra. It does NOT include an on-device MariaDB daemon or production database credentials. Separate com.metin2.serverallinone package, not a game client. SHA256 c9fef5277482b69b6f6c96e57fe5d978bcd78033e80437e589602a4083be51a4.' \
+              --prerelease --target main
+          fi
+          gh release view server-arm64-qa-v2 --repo "$GH_REPO" --json tagName,assets,url
