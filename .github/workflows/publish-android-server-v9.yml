@@ -1,0 +1,50 @@
+name: Publish stable Android ARM64 server APK v9
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-android-server-v9.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metin2-android-server-latest
+  cancel-in-progress: false
+
+jobs:
+  publish-verified:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Download from QA origin and verify exact signed ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 8 --retry-all-errors --retry-delay 5 \
+            --connect-timeout 25 --max-time 1500 \
+            --output Metin2-Server-Android-latest.apk \
+            'https://nas.tail8abd52.ts.net/metin2-s24/Metin2-Server-Android-latest.apk'
+          echo 'e26d6b02a68fdef221da78cf5a2bc9cc29927ace1be54990fc2339c3920ff447  Metin2-Server-Android-latest.apk' | sha256sum --check
+          test "$(stat --format=%s Metin2-Server-Android-latest.apk)" = 78690041
+          file Metin2-Server-Android-latest.apk
+      - name: Publish stable-name public GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag=android-server-latest
+          asset=Metin2-Server-Android-latest.apk
+          if gh release view "$tag" --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload "$tag" "$asset" --repo "$GH_REPO" --clobber
+          else
+            gh release create "$tag" "$asset" \
+              --repo "$GH_REPO" --target main --prerelease --latest=false \
+              --title 'Metin2 Android ARM64 LocalDB server QA v9' \
+              --notes 'Real original C++ DB/Master/Auth/Game with isolated local MariaDB; BlueStacks x86_64 AUTH/PIN/MASTER, character create/select and native PHASE_GAME(5), server restart/persistence verified. Physical Samsung S24 Ultra ARM64 installation and GUI gameplay NOT verified. SHA256: e26d6b02a68fdef221da78cf5a2bc9cc29927ace1be54990fc2339c3920ff447.'
+          fi
+          gh release view "$tag" --repo "$GH_REPO" --json tagName,url,assets
