@@ -1,0 +1,50 @@
+name: Publish original Metin2 ARM64 server APK v0.2 experimental
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/publish-server-arm64-v02.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: metin2-server-arm64-v02-experimental
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch verified native Android ARM64 Metin2 server host APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --location --retry 4 --retry-all-errors --retry-delay 3 \
+            --connect-timeout 15 --max-time 240 \
+            --output Metin2-ARM64-Server-v0.2-EXPERIMENTAL.apk \
+            'https://nas.tail8abd52.ts.net/metin2-s24/Metin2-ARM64-Server-v0.2-EXPERIMENTAL.apk'
+          printf '%s  %s\n' \
+            'a79184bf4c007b2895bb90e6fd4f5aaead6c6a58b1e7e76a05ed5fc5dc3b9ade' \
+            'Metin2-ARM64-Server-v0.2-EXPERIMENTAL.apk' | sha256sum --check --status
+          test "$(stat --format=%s Metin2-ARM64-Server-v0.2-EXPERIMENTAL.apk)" = 25490130
+      - name: Publish separate test prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view server-arm64-v0.2-experimental --repo "$GH_REPO" >/dev/null 2>&1; then
+            gh release upload server-arm64-v0.2-experimental Metin2-ARM64-Server-v0.2-EXPERIMENTAL.apk --repo "$GH_REPO" --clobber
+          else
+            gh release create server-arm64-v0.2-experimental Metin2-ARM64-Server-v0.2-EXPERIMENTAL.apk \
+              --repo "$GH_REPO" \
+              --title 'Metin2 original Android ARM64 server v0.2 — experimental' \
+              --notes 'Experimental Android ARM64 server APK bundles original Auth, Master, DB and Game native C++ PIE executables and FreeBSD game-data archive. Foreground service, TCP port diagnostics and manual ZIP import included. The related BlueStacks x86_64 build launched Master and Auth. DB and Game are NOT operational without independent MariaDB/config/world bootstrap. No S24 Ultra runtime or end-to-end playable server test passed. SHA256: a79184bf4c007b2895bb90e6fd4f5aaead6c6a58b1e7e76a05ed5fc5dc3b9ade. This does not replace the FreeBSD server or Android game client.' \
+              --prerelease --target main
+          fi
+          gh release view server-arm64-v0.2-experimental --repo "$GH_REPO" --json url,assets
